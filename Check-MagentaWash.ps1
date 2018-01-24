@@ -7,6 +7,22 @@ $version = "0.0.3"
 $WSUSGroup = "EON"
 $WSUSServer = "10.1.1.1"
 
+#detect OS version and architecture
+Function Get-OSVersionData {
+	$os = gwmi win32_operatingsystem
+	switch -wildcard ($os.version) {
+		
+		"10.0*" { $version = "W2k16"; $family = 'W2k16' }
+		"6.3*" { $version = "W2k12R2"; $family = 'W2k12' }
+		"6.2*" { $version = "W2k12"; $family = 'W2k12' }
+		"6.1*" { $version = "W2k8R2"; $family = 'W2k8' }
+		"6.0*" { $version = "W2k8"; $family = 'W2k8' }
+	}
+	
+	write-output (new-object psobject -Property @{ Version = $os.version; Name = $version; Family = $family; Architecture = (($os.OSArchitecture).substring(0, 2)) })
+	
+}
+
 function Set-CheckResult {
 	[CmdletBinding()]
 	Param (
@@ -41,7 +57,6 @@ function Set-CheckResult {
 		}
 	}
 }
-
 function Check {
 	[CmdletBinding()]
 	param (
@@ -53,15 +68,13 @@ function Check {
 		[string]$Key,
 		[Parameter(Mandatory = $true, ParameterSetName = 'registry')]
 		[string]$Value,
-		[Parameter(Mandatory = $true, ParameterSetName = 'Command')]
-		[switch]$command,
-		[Parameter(Mandatory = $true, ParameterSetName = 'Command')]
-		[string]$something
-		,
+		[Parameter(Mandatory = $true, ParameterSetName = 'feature')]
+		[switch]$Feature,
+		[Parameter(Mandatory = $true, ParameterSetName = 'feature')]
+		[string]$Name,
 		[string]$shared,
 		[string]$Section,
 		[string]$Property
-		
 	)
 	Begin {
 		if ($Registry) {
@@ -77,6 +90,13 @@ function Check {
 			} else {
 				Write-Host 'reg value is not correct'
 				Set-CheckResult -Section $Section -Property $Property -ValueExpected $Value -ValueCurrent ((get-itemproperty $path -name $key -Ea silentlycontinue).$key) -Result $false
+			}
+		} elseif ($Feature) {
+			$status = $features | where { $_.name -like $name }
+			if ($status.InstallState -eq "Installed") {
+				Set-CheckResult -Section $Section -property $Property -ValueExpected "Installed" -ValueCurrent $status.InstallState -result $true
+			} else {
+				Set-CheckResult -Section $Section -property $Property -ValueExpected "Installed" -ValueCurrent $status.InstallState -result $false
 			}
 		}
 		
@@ -139,7 +159,7 @@ function Create-HTMLSectionTitle {
 		[string]$name
 	)
 	Process {
-		return "<p class='title'>$name</p>"	
+		return "<p class='title'>$name</p>"
 	}
 }
 
@@ -200,7 +220,52 @@ function Create-HTMLSection {
 	}
 }
 
+$OSData = get-osversiondata
 $Data = @{ }
+
+#Windows features
+switch ($OSData.family) {
+	'W2k8'{
+		$featuresRAW = ServerManagerCmd.exe -query
+		$features = @()
+		foreach ($item in $featuresRAW) {
+			if ($item.contains("[ ]") -or $item.contains("[X]")) {
+				if ($item.contains("[ ]")) { $installed = $false } elseif ($item.contains("[X]")) { $installed = $true }
+				Write-Host $item -fore cyan
+				$Name = $item.substring($item.lastindexof('[') + 1, ($item.lastindexof(']') - $item.lastindexof('[') - 1))
+				$features += new-object System.Management.Automation.PSObject -Property @{ 'Name' = $Name; 'InstallState' = $installed; }
+			} else {
+				Write-Host $item -ForegroundColor magenta
+			}
+		}
+		Check -Section "Windows features" -Property "SNMP service" -feature -Name "SNMP-Service"
+		Check -Section "Windows features" -Property "SNMP-WMI-Provider" -feature -Name "SNMP-WMI-Provider"
+		Check -Section "Windows features" -Property "Telnet-client" -feature -Name "Telnet-client"
+		Check -Section "Windows features" -Property "Backup" -feature -Name "Backup"
+		Check -Section "Windows features" -Property "Backup-tools" -feature -Name "Backup-tools"
+	}
+	'W2k12'{
+		$features = Get-WindowsFeature
+		Check -Section "Windows features" -Property "Storage-services" -feature -Name "Storage-services"
+		Check -Section "Windows features" -Property "SNMP-WMI-Provider" -feature -Name "SNMP-WMI-Provider"
+		Check -Section "Windows features" -Property "Telnet-client" -feature -Name "Telnet-client"
+		Check -Section "Windows features" -Property "RSAT-SNMP" -feature -Name "RSAT-SNMP"
+	}
+	'W2k16' {
+		$features = Get-WindowsFeature
+		Check -Section "Windows features" -Property "Storage-services" -feature -Name "Storage-services"
+		Check -Section "Windows features" -Property "WoW64-Support" -feature -Name "WoW64-Support"
+		Check -Section "Windows features" -Property "Telnet-client" -feature -Name "Telnet-client"
+		Check -Section "Windows features" -Property "NET-Framework-45-Core" -feature -Name "NET-Framework-45-Core"
+		Check -Section "Windows features" -Property "NET-WCF-TCP-PortSharing45" -feature -Name "NET-WCF-TCP-PortSharing45"
+		Check -Section "Windows features" -Property "FS-SMB1" -feature -Name "FS-SMB1"
+		Check -Section "Windows features" -Property "PowerShell" -feature -Name "PowerShell"
+		Check -Section "Windows features" -Property "PowerShell-ISE" -feature -Name "PowerShell-ISE"
+		Check -Section "Windows features" -Property "Windows-Server-Backup" -feature -Name "Windows-Server-Backup"
+		Check -Section "Windows features" -Property "SNMP service" -feature -Name "SNMP-Service"
+		Check -Section "Windows features" -Property "SNMP-WMI-Provider" -feature -Name "SNMP-WMI-Provider"
+	}
+}
 
 #WSUS configuration
 Check -Section "WSUS configuration" -Property "Target group enabled" -Registry -path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate" -key "TargetGroupENabled" -Value 1
@@ -304,7 +369,9 @@ Check -Section "Temporary folders" -Property "PerSessionTempDir" -Registry -Path
 #HTML
 $html = Get-HTMLHeader
 $html += Get-HTMLTitle
-$html += Create-HTMLSectionTitle -Name "Windows updates"
+$html += Create-HTMLSectionTitle -Name "Windows features"
+$html += Create-HTMLSection -Name 'Windows features' -Data $Data.'windows features'
+$html += Create-HTMLSectionTitle -Name "Windows updates installation status"
 $html += Create-HTMLSection -Name 'WSUS server' -Data $Data.'wsus server'
 $html += Create-HTMLSection -Name 'WSUS configuration' -Data $Data.'wsus configuration'
 $html += Create-HTMLSectionTitle -Name "SNMP trap configuration"
