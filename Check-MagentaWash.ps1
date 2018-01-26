@@ -1,11 +1,159 @@
 ﻿# 23.1.2018 - Initial release. Base functionality backbone. Few WSUS options check for functionality test
 # 24.1.2018 - Added WSUS configuration, SNMP configuration and terminal services configuration
 # 24.1.2018 - Added initial version of HTML report
+# 24.1.2018 - Added McAfee AV check, added check of installed win features
+# 26.1.2018 - Extended McAfee AV details, Added Winaudit, logW, HPSA tools. Added check of system config file. Started with HPSAM tool check
+#
+# check https://github.com/luki-sk/MagentaWashCheck for new version os issue reporting
+$version = "0.0.5"
 
-$version = "0.0.3"
+$ParamWSUSGroup = "EON"
+$ParamWSUSServer = "10.1.1.1"
+$ParamMcAfeeVersion = "VSE88P9"
+$ParamMcAfeeEPO = "10.67.4.7:57398"
+$paramWinauditVersion = 205
+$paramWinauditServer = "164.32.27.148"
+$paramWinauditPort = "2444"
+$paramWinauditDatDate = 'anything'
+$paramLogWVersion = "1.30"
+$paramLogWServer = "6.49.35.103"
+$paramLogWPort = 314
+$paramSger = "nenula"
+$paramHPSAMID = 'nenula'
+$ParamHPSAServer = '160.118.6.168'
+$PAramHPSAPort = 3001
+$ParamHPSAMServer = "2a00:da9:ff00:61d:e9::2090:6932"
 
-$WSUSGroup = "EON"
-$WSUSServer = "10.1.1.1"
+#telnet connection test
+function Test-Telnet {
+	param (
+		[string]$IP,
+		[int]$port,
+		[int]$timeout = 2000
+	)
+	if ($IP -and $port) {
+		$tcpobject = New-Object -TypeName System.Net.Sockets.TcpClient
+		$connect = $tcpobject.BeginConnect($IP, $Port, $null, $null)
+		$connection = $connect.AsyncWaitHandle.WaitOne($Timeout, $false)
+		return $connection
+	}
+	return (
+	$false
+	)
+}
+function get-Sger {
+	[CmdletBinding()]
+	Param ()
+	
+	process {
+		if ((Test-Path $ConfigFile -PathType Leaf)) {
+			[string]$Sger_row = Get-Content $ConfigFile | Select-String "system_id*"
+			if ($Sger_row -eq $null) {
+				return "sger not defined"
+			} else {
+				$Sger = $Sger_row.Substring($Sger_row.LastIndexOf("=") + 1)
+				
+				if ($Sger -eq $null -or $Sger -like "") {
+					return "sger not defined"
+				} else {
+					return $sger
+				}
+			}
+		} else {
+			return "file missing"
+		}
+	}
+}
+function Get-HPSAMID {
+	[CmdletBinding()]
+	Param ()
+	begin {
+		$MIDfile = 'C:\Program Files\Common Files\Opsware\etc\agent\mid'
+	}
+	Process {
+		
+		if (Test-Path $MIDfile) {
+			$MIDContent = (Get-Content $MIDfile)[0]
+			if ($MIDContent.trim() -eq $null -or $MIDContent.trim() -like "") {
+				return "MID not defined"
+			} else {
+				return $MIDContent
+			}
+		} else {
+			return "file missing"
+		}
+		
+	}
+	
+}
+function get-HPSAServer {
+	[CmdletBinding()]
+	Param ()
+	begin {
+		$ArgFile = 'C:\Program Files\Common Files\Opsware\etc\agent\opswgw.args'
+	}
+	Process {
+		if (Test-Path $ArgFile) {
+			$Content = (Get-Content $ArgFile)
+			$String = ($Content.replace("opswgw.gw_list: ", "").split(","))[0]
+			if ($string) {
+				return New-Object System.Management.Automation.PSObject -Property @{ Server = $String.split(":")[0];  port = $String.split(":")[1]}
+			} else {
+				return New-Object System.Management.Automation.PSObject -Property @{ Server = "not detected"; port = "not detected" }
+			}
+		} else {
+			return New-Object System.Management.Automation.PSObject -Property @{ Server = "file missing"; port = "file missing" }
+		}
+		
+	}
+	
+}
+
+function get-HPSAMCertificateStatus {
+	[CmdletBinding()]
+	Param ()
+	begin {
+	$result = ovcert -status	
+	}
+	Process {
+		return $result.replace("Status: ","")
+		
+	}
+	
+}
+function Get-McAfeeEPO {
+	[CmdletBinding()]
+	Param ()
+	
+	begin {
+		switch ($OSData.architecture) {
+			"32" {
+				$EPOList = (get-itemproperty "HKLM:\SOFTWARE\Network Associates\ePolicy Orchestrator\Agent" -name "ePOServerList" -Ea silentlycontinue).ePOServerList
+			}
+			"64"{
+				$EPOList = (get-itemproperty "HKLM:\SOFTWARE\Wow6432Node\Network Associates\ePolicy Orchestrator\Agent" -name "ePOServerList" -Ea silentlycontinue).ePOServerList
+			}
+		}
+		if ($EPOList) {
+			$EPOListSplitted = $EPOList.split(";")
+		}
+	}
+	Process {
+		$Result = @()
+		if ($EPOListSplitted) {
+			foreach ($item in $EPOListSplitted) {
+				if ($item -notlike "") {
+					$Result += New-Object System.Management.Automation.PSObject -Property @{ Server = $($item.split("|")[1]); Port = $($item.split("|")[2]) }
+				}
+			}
+			return $Result
+		} else {
+			return $false
+		}
+		
+	}
+	
+}
 
 #detect OS version and architecture
 Function Get-OSVersionData {
@@ -38,23 +186,23 @@ function Set-CheckResult {
 			Write-Host "Current value not set. setting to empty string"
 			$ValueCurrent = "not set"
 		}
+		$ValueExpected.gettype()
+		if ($ValueExpected -eq $null) {
+			Write-Host "Expected value not set. setting to ---g"
+			$ValueExpected = "---"
+			$result = $null
+		}
 		
 	}
 	process {
 		if ($script:Data.$Section -eq $null) {
-			Write-Host "Section $section doesnt exist. Creating"
 			$script:Data.$Section = @{ }
-		} else {
-			Write-Host "Section $section exists"
 		}
 		
 		if ($script:Data.$Section.$property -eq $null) {
-			#Write-Host "Property $property doesnt exist. Creating"
-			#$script:Data.$Section | add-member -MemberType NoteProperty -Name $Property -Value (New-Object System.Management.Automation.PSObject -Property @{ ValueExpected = $ValueExpected; ValueCurrent = $ValueCurrent; Result = $result })
-			#} else {
-			#Write-Host "Property $property exist. Setting"
 			$script:Data.$Section.$property = New-Object System.Management.Automation.PSObject -Property @{ ValueExpected = $ValueExpected; ValueCurrent = $ValueCurrent; Result = $result }
 		}
+		Write-Host "**********"
 	}
 }
 function Check {
@@ -66,19 +214,26 @@ function Check {
 		[string]$Path,
 		[Parameter(Mandatory = $true, ParameterSetName = 'registry')]
 		[string]$Key,
-		[Parameter(Mandatory = $true, ParameterSetName = 'registry')]
-		[string]$Value,
 		[Parameter(Mandatory = $true, ParameterSetName = 'feature')]
 		[switch]$Feature,
-		[Parameter(Mandatory = $true, ParameterSetName = 'feature')]
+		[Parameter(Mandatory = $true, ParameterSetName = 'service')]
+		[switch]$service,
+		[Parameter(Mandatory = $true, ParameterSetName = 'string')]
+		[switch]$string,
 		[string]$Name,
-		[string]$shared,
+		[string]$Value,
 		[string]$Section,
 		[string]$Property
 	)
 	Begin {
 		if ($Registry) {
-			Write-Host "CHECK REGISTRY: $Path - $key - $value for $section - $property"
+			Write-Host "CHECK REGISTRY: $Path - $key - $value IN $section - $property"
+		} elseif ($Feature) {
+			Write-Host "CHECK FEATURE: $Name IN $section - $property"
+		} elseif ($service) {
+			Write-Host "CHECK SERVICE: $Name - $Value IN $section - $property"
+		} elseif ($String) {
+			Write-Host "CHECK STRING: $Name - $Value IN $section - $property"
 		}
 	}
 	
@@ -97,6 +252,19 @@ function Check {
 				Set-CheckResult -Section $Section -property $Property -ValueExpected "Installed" -ValueCurrent $status.InstallState -result $true
 			} else {
 				Set-CheckResult -Section $Section -property $Property -ValueExpected "Installed" -ValueCurrent $status.InstallState -result $false
+			}
+		} elseif ($service) {
+			$status = Get-Service $Name
+			if ($status.status -like $value) {
+				Set-CheckResult -Section $Section -property $Property -ValueExpected $Value -ValueCurrent $status.status -result $true
+			} else {
+				Set-CheckResult -Section $Section -property $Property -ValueExpected $Value -ValueCurrent $status.status -result $false
+			}
+		} elseif ($string) {
+			if ($name -like $value) {
+				Set-CheckResult -Section $Section -property $Property -ValueExpected $Value -ValueCurrent $name -result $true
+			} else {
+				Set-CheckResult -Section $Section -property $Property -ValueExpected $Value -ValueCurrent $name -result $false
 			}
 		}
 		
@@ -145,7 +313,6 @@ function Get-HTMLTitle {
 	<div class='version'>report version: $version</div>
 "@
 }
-
 function Get-HTMLEnd {
 	return @"
 </div>
@@ -162,7 +329,6 @@ function Create-HTMLSectionTitle {
 		return "<p class='title'>$name</p>"
 	}
 }
-
 function Create-HTMLSection {
 	[CmdletBinding()]
 	param (
@@ -195,9 +361,12 @@ function Create-HTMLSection {
 			if ($Data.$prop.result -eq $false) {
 				$class = 'red'
 				$Text = 'Incorrect'
-			} else {
+			} elseif ($Data.$prop.result -eq $true) {
 				$class = 'green'
 				$Text = "Correct"
+			} else {
+				$class = ""
+				$Text = "info only"
 			}
 			$html += @"
 						<tr>
@@ -219,6 +388,10 @@ function Create-HTMLSection {
 		
 	}
 }
+
+
+# CHECK START #
+
 
 $OSData = get-osversiondata
 $Data = @{ }
@@ -269,7 +442,7 @@ switch ($OSData.family) {
 
 #WSUS configuration
 Check -Section "WSUS configuration" -Property "Target group enabled" -Registry -path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate" -key "TargetGroupENabled" -Value 1
-Check -Section "WSUS configuration" -Property "Target group" -Registry -Path "Hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate" -key "TargetGroup" -Value $WSUSGroup
+Check -Section "WSUS configuration" -Property "Target group" -Registry -Path "Hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate" -key "TargetGroup" -Value $ParamWSUSGroup
 Check -Section "WSUS configuration" -Property "Do Not Connect To Windows Update Internet Locations" -Registry -Path "Hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate" -key "DoNotConnectToWindowsUpdateInternetLocations" -Value 1
 Check -Section "WSUS configuration" -Property "AUOptions" -Registry -Path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate\AU" -key "AUOptions" -Value 3
 Check -Section "WSUS configuration" -Property "Detection frequency" -Registry -Path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate\AU" -key "DetectionFrequency" -value 16
@@ -281,8 +454,8 @@ Check -Section "WSUS configuration" -Property "RebootWarningTimeoutEnabled" -Reg
 Check -Section "WSUS configuration" -Property "ScheduledInstallDate" -Registry -Path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate\AU" -Key "ScheduledInstallDay" -Value 0
 Check -Section "WSUS configuration" -Property "ScheduledInstallTime" -Registry -Path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate\AU" -Key "ScheduledInstallTime" -Value 3
 Check -Section "WSUS configuration" -Property "Use Windows update server" -Registry -Path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate\AU" -Key "UseWUServer" -Value 1
-Check -Section "WSUS server" -Property "WUServer" -Registry -Path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate" -Key "WUServer" -Value $WSUSServer
-Check -Section "WSUS server" -Property "WUStatusServer" -Registry -Path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate" -Key "WUStatusServer" -Value $WSUSServer
+Check -Section "WSUS server" -Property "WUServer" -Registry -Path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate" -Key "WUServer" -Value $ParamWSUSServer
+Check -Section "WSUS server" -Property "WUStatusServer" -Registry -Path "hklm:\Software\Policies\Microsoft\Windows\WindowsUpdate" -Key "WUStatusServer" -Value $ParamWSUSServer
 
 #SNMP TRAPS
 Check -Section "SNMP" -Property "1" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\services\SNMP\Parameters\TrapConfiguration\HWmonitoring" -Key 1 -Value "127.0.0.1"
@@ -355,13 +528,62 @@ Check -Section "Temporary folders" -Property "DeleteTempDirsOnExit" -Registry -P
 #Do not use temporary folders per session
 Check -Section "Temporary folders" -Property "PerSessionTempDir" -Registry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Key "PerSessionTempDir" -Value "1"
 
+#Server Config file 
+$ConfigFile = "C:\Windows\System32\Drivers\etc\epmf\tsi_system_info.cfg"
+Check -Section "Server config tsi_system_info.cfg" -Property "File exists" -String -Name $((Test-Path $ConfigFile -PathType Leaf) -eq $true) -Value $true
+Check -Section "Server config tsi_system_info.cfg" -Property "Sger" -String -Name $(get-sger) -Value $ParamSger
 
 
 
 
 
+#McAfee AV
+Check -Section "McAfee" -Property "Service status" -Service -Name "McShield" -Value "Running"
+
+switch ($OSData.architecture) {
+	"32" {
+		Check -Section "McAfee" -Property "McAfee version" -Registry -Path "HKLM:\SOFTWARE\McAfee\DesktopProtection" -Key "CoreRef" -Value $ParamMcAfeeVersion
+		Check -Section "McAfee" -Property "DAT file download date" -Registry -Path "HKLM:\SOFTWARE\McAfee\AVEngine" -Key "AVDatDate" -Value $paramWinauditDatDate
+	}
+	"64"{
+		Check -Section "McAfee" -Property "McAfee version" -Registry -Path "HKLM:\SOFTWARE\Wow6432Node\McAfee\DesktopProtection" -Key "CoreRef" -Value $ParamMcAfeeVersion
+		Check -Section "McAfee" -Property "DAT file download date" -Registry -Path "HKLM:\SOFTWARE\Wow6432Node\McAfee\AVEngine" -Key "AVDatDate" -Value $paramWinauditDatDate
+		
+	}
+}
+$McAfeeEpo = Get-McAfeeEPO
+Check -Section "McAfee" -Property "EPO Server" -String -Name $(($McAfeeEpo | %{ "$($_.server):$($_.port)" }) -join "<br/>") -Value $ParamMcAfeeEPO
+Check -Section "McAfee" -Property "EPO connectivity" -String -Name $(Test-Telnet -IP $McAfeeEpo[0].server -port $McAfeeEpo[0].port) -Value $True
 
 
+#Winaudit
+Check -Section "WinAudit" -Property "Service status" -Service -Name "Winaudit" -Value "Running"
+Check -Section "WinAudit" -Property "Winaudit version" -Registry -Path "HKLM:\SOFTWARE\T-Systems\WinAudit" -Key "Version" -Value $paramWinauditVersion
+Check -Section "WinAudit" -Property "Winaudit server" -Registry -Path "HKLM:\SOFTWARE\T-Systems\WinAudit" -Key "Server" -Value $paramWinauditServer
+Check -Section "WinAudit" -Property "Winaudit port" -Registry -Path "HKLM:\SOFTWARE\T-Systems\WinAudit" -Key "port" -Value $paramWinauditPort
+Check -Section "WinAudit" -Property "Winaudit connectivity" -string -Name $(Test-Telnet -IP $Data.winaudit.'Winaudit server'.ValueCurrent -port $Data.winaudit.'Winaudit port'.ValueCurrent) -Value $True
+
+#logW
+Check -Section "LogW" -Property "Service status" -Service -Name "LogW" -Value "Running"
+Check -Section "LogW" -Property "LogW version" -Registry -Path "HKLM:\SOFTWARE\T-Systems\LogW" -Key "Version" -Value $paramLogWVersion
+Check -Section "LogW" -Property "LogW server" -Registry -Path "HKLM:\SOFTWARE\T-Systems\LogW" -Key "LogServer_IP" -Value $paramLogWServer
+Check -Section "LogW" -Property "LogW port" -Registry -Path "HKLM:\SOFTWARE\T-Systems\LogW" -Key "LogServer_Port" -Value $paramLogWPort
+Check -Section "LogW" -Property "LogW connectivity" -string -Name $(Test-Telnet -IP $Data.LogW.'logw server'.ValueCurrent -port $Data.logw.'logw port'.ValueCurrent) -Value $True
+
+#HPSA
+$HPSADetails= get-HPSAServer
+Check -Section "HPSA" -Property "Service status" -Service -Name "OpswareAgent" -Value "Running"
+Check -Section "HPSA" -Property "MID identifier" -String -Name $(get-HPSAMID) -Value $ParamHPSAMID
+Check -Section "HPSA" -Property "HPSA server" -String -Name $HPSADetails.server -Value $ParamHPSAServer
+Check -Section "HPSA" -Property "HPSA port" -String -Name $HPSADetails.port -Value $ParamHPSAPort
+Check -Section "HPSA" -Property "HPSA connectivity" -string -Name $(Test-Telnet -IP $HPSADetails.server -port $HPSADetails.port) -Value $True
+
+#HPSAM
+
+Check -Section "HPSAM" -Property "Service status" -Service -Name "OvCtrl" -Value "Running"
+Check -Section "HPSAM" -Property "Certificates status" -string -Name $(get-HPSAMCertificateStatus) -Value "Certificate is installed."
+Check -Section "HPSAM" -Property "HPSAM server" -string -Name $((ovconfget | where { $_ -like "MANAGER=*" }).Replace("MANAGER=", "")) -Value $ParamHPSAMServer
+Check -Section "HPSAM" -Property "HPSAM connectivity" -string -Name $(Test-Telnet -IP $Data.HPSAM.'HPSAM server'.ValueCurrent -port 383) -Value $True
 
 
 
@@ -371,7 +593,7 @@ $html = Get-HTMLHeader
 $html += Get-HTMLTitle
 $html += Create-HTMLSectionTitle -Name "Windows features"
 $html += Create-HTMLSection -Name 'Windows features' -Data $Data.'windows features'
-$html += Create-HTMLSectionTitle -Name "Windows updates installation status"
+$html += Create-HTMLSectionTitle -Name "Windows updates "
 $html += Create-HTMLSection -Name 'WSUS server' -Data $Data.'wsus server'
 $html += Create-HTMLSection -Name 'WSUS configuration' -Data $Data.'wsus configuration'
 $html += Create-HTMLSectionTitle -Name "SNMP trap configuration"
@@ -383,7 +605,15 @@ $html += Create-HTMLSection -Name "Printer redirection" -Data $Data."Printer red
 $html += Create-HTMLSection -Name "Security" -Data $Data.Security
 $html += Create-HTMLSection -Name "Session Time Limits" -Data $Data."Session Time Limits"
 $html += Create-HTMLSection -Name "Temporary folders" -Data $Data."Temporary folders"
+$html += Create-HTMLSectionTitle -Name "Software"
+$html += Create-HTMLSection -Name "McAfee AV" -Data $Data.McAfee
+$html += Create-HTMLSection -Name "WinAudit security agent" -Data $Data.Winaudit
+$html += Create-HTMLSection -Name "LogW agent" -Data $Data.LogW
+$html += Create-HTMLSection -Name "HPSA automation agent" -Data $Data.HPSA
+$html += Create-HTMLSection -Name "HPSAM monitoring agent" -Data $Data.HPSAM
 
 $html += Get-HTMLEnd
 
 $html | Out-File .\HTMLMangenta.html -Encoding "ASCII"
+
+
