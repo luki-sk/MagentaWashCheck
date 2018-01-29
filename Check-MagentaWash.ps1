@@ -178,14 +178,36 @@ function get-HPSAServer {
 function get-HPSAMCertificateStatus {
 	[CmdletBinding()]
 	Param ()
-	begin {
-		$result = ovcert -status
-	}
 	Process {
-		return $result.replace("Status: ", "")
-		
+		try {
+			$result = ovcert -status
+		} catch {
+
+		}
+		if ($result) {
+			return $result.replace("Status: ", "")
+		} else {
+			return "Ovconfget commad not found"
+}
 	}
 	
+}
+function Get-HPSAMServer {
+	[CmdletBinding()]
+	Param ()
+	Process {
+		Try {
+			$ovconfget = ovconfget
+		} Catch {
+			
+		}
+		
+		if ($ovconfget) {
+			return ($ovconfget | where { $_ -like "MANAGER=*" }).Replace("MANAGER=", "")
+		} else {
+			return "ovconfget commad not found"
+		}
+	}
 }
 function Get-McAfeeEPO {
 	[CmdletBinding()]
@@ -645,10 +667,9 @@ Check -Section "HPSA" -Property "HPSA port" -String -Name $HPSADetails.port -Val
 Check -Section "HPSA" -Property "HPSA connectivity" -string -Name $(Test-Telnet -IP $HPSADetails.server -port $HPSADetails.port) -Value $True
 
 #HPSAM
-
 Check -Section "HPSAM" -Property "Service status" -Service -Name "OvCtrl" -Value "Running"
 Check -Section "HPSAM" -Property "Certificates status" -string -Name $(get-HPSAMCertificateStatus) -Value "Certificate is installed."
-Check -Section "HPSAM" -Property "HPSAM server" -string -Name $((ovconfget | where { $_ -like "MANAGER=*" }).Replace("MANAGER=", "")) -Value $ParamHPSAMServer
+Check -Section "HPSAM" -Property "HPSAM server" -string -Name $(Get-HPSAMServer) -Value $ParamHPSAMServer
 Check -Section "HPSAM" -Property "HPSAM connectivity" -string -Name $(Test-Telnet -IP $Data.HPSAM.'HPSAM server'.ValueCurrent -port 383) -Value $True
 
 #Local admininstators members
