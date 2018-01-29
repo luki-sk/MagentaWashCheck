@@ -146,6 +146,29 @@ function Get-LocalBuildInAdmin {
 	}
 }
 
+function Get-RDPAutenticationlevel{
+	[CmdletBinding()]
+	Param ()
+	Process {
+		Try {
+			$WMI = (Get-WmiObject -Class "Win32_TSGeneralSetting" -Namespace root\cimv2\TerminalServices -Filter "TerminalName='RDP-tcp'")
+			$RDPAUtentication = $wmi.UserAuthenticationRequired
+		} Catch {
+			
+		}
+		if ($RDPAUtentication -ne $null) {
+			switch ($RDPAUtentication) {
+				"1" { $result = $true }
+				"0" { $result = $false }
+			}
+		} else {
+			$result = "not detected"	
+		}
+		return $result
+		
+	}
+	
+}
 function get-DOnumber {
 	[CmdletBinding()]
 	Param ()
@@ -780,6 +803,8 @@ Check -Section "Local administrators" -Property "Build-in admin name" -string -C
 
 #System
 Check -Section "System" -Property "CD-ROM letter" -string -CurrentValue $(get-CDROMletter) -ExpectedValue "Z:"
+Check -Section "System" -Property "RDP connection enabled" -string -CurrentValue $(((Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).AllowTSConnections -eq 1)) -ExpectedValue $true
+Check -Section "System" -Property "Allow RDP connection only with network level autentication enabled" -string -CurrentValue $(Get-RDPAutenticationLevel) -ExpectedValue $false
 
 #Firewall
 $FWStatus = Get-FWProfileStatus
