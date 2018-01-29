@@ -3,7 +3,10 @@
 # 24.01.2018 - Added initial version of HTML report
 # 24.01.2018 - Added McAfee AV check, added check of installed win features
 # 26.01.2018 - Extended McAfee AV details, Added Winaudit, logW, HPSA tools. Added check of system config file. Started with HPSAM tool check
-# 29.01.2018 - Added check for local Administrators group members
+# 29.01.2018 - Added check for local Administrators group members.Added check for build-in admin name,updated functions for HPSAM to supress errors on servers where no HPSAM in installed
+
+
+
 
 # check https://github.com/luki-sk/MagentaWashCheck for new version os issue reporting
 $version = "0.0.5"
@@ -242,6 +245,22 @@ function Get-McAfeeEPO {
 	}
 	
 }
+function Get-VmwareToolsVersion {
+	
+	Process {
+		$path = "hklm:SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+		$Subkeys = (Get-Childitem -Path $Path).Name
+		foreach ($item in $Subkeys) {
+			$SubPath = $item.replace("HKEY_LOCAL_MACHINE","hklm:")
+			$details = Get-ItemProperty -Path $SubPath
+			if ($details.DisplayName -like "VMware Tools") {
+				return $details.DisplayVersion
+			}
+		}
+		return "Not detected"
+	}
+}
+
 
 #detect OS version and architecture
 Function Get-OSVersionData {
@@ -258,6 +277,7 @@ Function Get-OSVersionData {
 	write-output (new-object psobject -Property @{ Version = $os.version; Name = $version; Family = $family; Architecture = (($os.OSArchitecture).substring(0, 2)) })
 	
 }
+
 
 function Set-CheckResult {
 	[CmdletBinding()]
@@ -672,6 +692,9 @@ Check -Section "HPSAM" -Property "Certificates status" -string -Name $(get-HPSAM
 Check -Section "HPSAM" -Property "HPSAM server" -string -Name $(Get-HPSAMServer) -Value $ParamHPSAMServer
 Check -Section "HPSAM" -Property "HPSAM connectivity" -string -Name $(Test-Telnet -IP $Data.HPSAM.'HPSAM server'.ValueCurrent -port 383) -Value $True
 
+#Vmware tools
+Check -Section "Vmware tools" -Property "Vmware tools version" -string -Name $(Get-VmwareToolsVersion) -Value "10.*"
+
 #Local admininstators members
 $LocalAdminsList = Get-LocalAdmins
 if (get-LocalAdminRequired -required $ParamLocalAdminRequired) {
@@ -687,6 +710,9 @@ if (get-LocalAdminAllowed -allowed $ParamLocalAdminAllowed) {
 }
 
 Check -Section "Local administrators" -Property "Build-in admin name" -string -Name $(Get-LocalBuildInAdmin) -Value $ParamLocalAdminName
+
+
+
 
 
 #HTML
@@ -712,6 +738,7 @@ $html += Create-HTMLSection -Name "WinAudit security agent" -Data $Data.Winaudit
 $html += Create-HTMLSection -Name "LogW agent" -Data $Data.LogW
 $html += Create-HTMLSection -Name "HPSA automation agent" -Data $Data.HPSA
 $html += Create-HTMLSection -Name "HPSAM monitoring agent" -Data $Data.HPSAM
+$html += Create-HTMLSection -Name "Vmware tools" -Data $Data.'Vmware tools'
 $html += Create-HTMLSection -Name "User accounts" -Data $Data.LogW
 $html += Create-HTMLSection -Name "Local Administrators" -Data $Data."Local administrators"
 
