@@ -57,12 +57,32 @@ function get-CDROMLetter {
 	Process {
 		$CDROMLetter = (gwmi win32_logicaldisk -Filter "drivetype=5") | %{ $_.deviceID }
 		if (!$CDROMLetter) {
-		return "not detected"
+			return "not detected"
 		} else {
-		return $CDROMLetter	
+			return $CDROMLetter
 		}
 	}
 	
+}
+
+function Get-FWProfileStatus {
+	[CmdletBinding()]
+	Param ()
+	
+	Process {
+		$result = @()
+		$Text = netsh advfirewall show allprofiles
+		foreach ($line in $text) {
+			if ($line -like "*Profile Settings:*") {
+				$FWProfile = $line.split(" ")[0]
+			}
+			if ($line -like "State*") {
+				$state = ($line -split '\s+')[1]
+				$result += New-Object System.Management.Automation.PSObject -Property @{ Profile = $FWProfile; State = $state }
+			}
+		}
+		return $result
+	}
 }
 
 function Get-LocalAdmins {
@@ -100,7 +120,7 @@ function get-LocalAdminAllowed {
 		[string[]]$allowed
 	)
 	Begin {
-		$allowed = $allowed | % { $_.ToLower()}
+		$allowed = $allowed | % { $_.ToLower() }
 	}
 	Process {
 		$Users = Get-LocalAdmins
@@ -119,7 +139,7 @@ function Get-LocalBuildInAdmin {
 	
 	Process {
 		$adsi = [ADSI]"WinNT://localhost"
-		$Users = $adsi.Children | where { $_.SchemaClassName -eq 'user' } | select @{ n = 'User'; e = { $_.name } }, @{n = 'SID'; e = {(New-Object System.Security.Principal.SecurityIdentifier($_.objectSid.value, 0)).Value}}
+		$Users = $adsi.Children | where { $_.SchemaClassName -eq 'user' } | select @{ n = 'User'; e = { $_.name } }, @{ n = 'SID'; e = { (New-Object System.Security.Principal.SecurityIdentifier($_.objectSid.value, 0)).Value } }
 		
 		$BuildInAdmin = $Users | where { $_.sid -like "*-500" }
 		return $BuildInAdmin.User
@@ -225,13 +245,13 @@ function get-HPSAMCertificateStatus {
 		try {
 			$result = ovcert -status
 		} catch {
-
+			
 		}
 		if ($result) {
 			return $result.replace("Status: ", "")
 		} else {
 			return "Ovconfget commad not found"
-}
+		}
 	}
 	
 }
@@ -291,7 +311,7 @@ function Get-VmwareToolsVersion {
 		$path = "hklm:SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
 		$Subkeys = (Get-Childitem -Path $Path).Name
 		foreach ($item in $Subkeys) {
-			$SubPath = $item.replace("HKEY_LOCAL_MACHINE","hklm:")
+			$SubPath = $item.replace("HKEY_LOCAL_MACHINE", "hklm:")
 			$details = Get-ItemProperty -Path $SubPath
 			if ($details.DisplayName -like "VMware Tools") {
 				return $details.DisplayVersion
@@ -761,6 +781,12 @@ Check -Section "Local administrators" -Property "Build-in admin name" -string -C
 #System
 Check -Section "System" -Property "CD-ROM letter" -string -CurrentValue $(get-CDROMletter) -ExpectedValue "Z:"
 
+#Firewall
+$FWStatus = Get-FWProfileStatus
+Check -Section "Firewall" -Property "Domain FW profile" -string -CurrentValue $(($FWStatus | where { $_.profile -like "Domain" }).State) -ExpectedValue "Off"
+Check -Section "Firewall" -Property "Private FW profile" -string -CurrentValue $(($FWStatus | where { $_.profile -like "Private" }).State) -ExpectedValue "Off"
+Check -Section "Firewall" -Property "Public FW profile" -string -CurrentValue $(($FWStatus | where { $_.profile -like "Public" }).State) -ExpectedValue "Off"
+
 
 
 #HTML
@@ -791,7 +817,8 @@ $html += Create-HTMLSectionTitle -Name "User accounts"
 $html += Create-HTMLSection -Name "Local Administrators" -Data $Data."Local administrators"
 $html += Create-HTMLSectionTitle -Name "System"
 $html += Create-HTMLSection -Name "System" -Data $Data.System
-
+$html += Create-HTMLSectionTitle -Name "Firewall configuration"
+$html += Create-HTMLSection -Name "Firewall status" -Data $Data.Firewall
 
 $html += Get-HTMLEnd
 
