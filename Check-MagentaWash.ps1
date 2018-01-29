@@ -801,8 +801,15 @@ Check -Section "Local administrators" -Property "Build-in admin name" -string -C
 
 #System
 Check -Section "System" -Property "CD-ROM letter" -string -CurrentValue $(get-CDROMletter) -ExpectedValue "Z:"
-Check -Section "System" -Property "RDP connection enabled" -string -CurrentValue $(((Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).AllowTSConnections -eq 1)) -ExpectedValue $true
-Check -Section "System" -Property "Allow RDP connection only with network level autentication enabled" -string -CurrentValue $(Get-RDPAutenticationLevel) -ExpectedValue $false
+
+#RDP configuration
+Check -Section "RDPConfig" -Property "RDP connection enabled" -string -CurrentValue $(((Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).AllowTSConnections -eq 1)) -ExpectedValue $true
+Check -Section "RDPConfig" -Property "Allow RDP connection only with network level autentication enabled" -string -CurrentValue $(Get-RDPAutenticationLevel) -ExpectedValue $false
+
+#System owner
+Check -Section "Owner" -Property "System organization" -Registry -Path "Hklm:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Key "Registeredorganizaion" -Value "T-Systems"
+Check -Section "Owner" -Property "System owner" -Registry -Path "Hklm:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Key "Registeredowner" -Value "T-Systems"
+
 
 #Crash control
 Check -Section "Crash control" -Property "Enabled crashonCtrl functionality" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\Services\i8042prt\Parameters" -Key "CrashOnCtrlScroll" -Value 1
@@ -844,6 +851,8 @@ $html += Create-HTMLSectionTitle -Name "User accounts"
 $html += Create-HTMLSection -Name "Local Administrators" -Data $Data."Local administrators"
 $html += Create-HTMLSectionTitle -Name "System"
 $html += Create-HTMLSection -Name "System" -Data $Data.System
+$html += Create-HTMLSection -Name "RDP configuration" -Data $Data.RDPconfig
+$html += Create-HTMLSection -Name "System owner" -Data $Data.owner
 $html += Create-HTMLSectionTitle -Name "System crash configuration"
 $html += Create-HTMLSection -Name "Crash control" -Data $Data."Crash control"
 $html += Create-HTMLSectionTitle -Name "Firewall configuration"
