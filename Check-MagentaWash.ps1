@@ -85,6 +85,24 @@ function Get-FWProfileStatus {
 	}
 }
 
+function Get-OSBootTimeout {
+	[CmdletBinding()]
+	Param ()
+	
+	Process {
+		$bcdTimeout = bcdedit | where { $_ -like "timeout*" }
+		if ($bcdTimeout) {
+			$timeout = ($bcdTimeout -split '\s+')[1]
+		}
+		
+		if ($timeout) {
+			return $timeout
+		} else {
+			return "not detected"	
+		}
+		
+	}
+}
 function Get-LocalAdmins {
 	[CmdletBinding()]
 	Param ()
@@ -801,6 +819,7 @@ Check -Section "Local administrators" -Property "Build-in admin name" -string -C
 
 #System
 Check -Section "System" -Property "CD-ROM letter" -string -CurrentValue $(get-CDROMletter) -ExpectedValue "Z:"
+Check -Section "System" -Property "OS Boot timeout" -string -CurrentValue $(Get-OSBootTimeout) -ExpectedValue "5"
 
 #RDP configuration
 Check -Section "RDPConfig" -Property "RDP connection enabled" -string -CurrentValue $(((Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).AllowTSConnections -eq 1)) -ExpectedValue $true
@@ -809,6 +828,7 @@ Check -Section "RDPConfig" -Property "Allow RDP connection only with network lev
 #System owner
 Check -Section "Owner" -Property "System organization" -Registry -Path "Hklm:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Key "Registeredorganizaion" -Value "T-Systems"
 Check -Section "Owner" -Property "System owner" -Registry -Path "Hklm:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Key "Registeredowner" -Value "T-Systems"
+
 
 
 #Crash control
