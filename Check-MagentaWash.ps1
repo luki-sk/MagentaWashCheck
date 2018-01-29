@@ -35,6 +35,10 @@ $ParamTimeZone = "GMT Standard Time"
 $ParamCulture = "en-US"
 $ParamSystemLocale = "en-US"
 $ParamWinHomeLocation = "242"
+$ParamOSLicenseType = "MAK"
+$ParamOSKMSServer = "6.5.4.3"
+
+
 
 #telnet connection test
 function Test-Telnet {
@@ -198,7 +202,7 @@ function Get-WinLocale {
 		if ($Locale.Name) {
 			return $locale.name
 		} else {
-			return "not detected"	
+			return "not detected"
 		}
 	}
 }
@@ -216,7 +220,7 @@ function Get-WinLocation {
 		if ($location.geoid) {
 			return $location.geoid
 		} else {
-			return "not defined"	
+			return "not defined"
 		}
 		
 	}
@@ -421,6 +425,43 @@ function Get-VmwareToolsVersion {
 		return "Not detected"
 	}
 }
+function Get-LicenseInformation {
+	[CmdletBinding()]
+	Param ()
+	
+	Process {
+		Try {
+			$WMI = Get-WmiObject SoftwareLicensingProduct -ErrorAction SilentlyContinue | Where-Object { $_.PartialProductKey -and $_.ApplicationID -eq "55c92734-d682-4d71-983e-d6ec3f16059f" }
+		} Catch {
+			
+		}
+		if ($wmi) {
+			switch -wildcard ($WMI.description) {
+				"*MAK*" { $type = "MAK" }
+				"*KMS*" { $type = "KMS" }
+				default { $type = $(($WMI.description -split ",")[-1].trim()) }
+			}
+			if ($WMI.KeyManagementServiceMachine) {
+				$KMS = $WMI.KeyManagementServiceMachine
+			} else {
+				$KMS = "Not detected"
+			}
+			if ($WMI.KeyManagementServicePort -ne 0) {
+				$KMSPort = $WMI.KeyManagementServicePort
+			} else {
+				$KMSPort = "Not detected"
+			}
+			
+			
+			return New-Object System.Management.Automation.PSObject -Property @{ Type = $type; KMSServer = $KMS; KMSPort = $KMSPort }
+		} else {
+			return New-Object System.Management.Automation.PSObject -Property @{ Type = "Not detected"; KMSServer = "Not detected"; KMSPort = "Not detected" }
+		}
+		
+		
+	}
+}
+
 
 
 #detect OS version and architecture
@@ -908,9 +949,20 @@ Check -Section "RegionalSettigns" -Property "Server time zone" -string -CurrentV
 Check -Section "Crash control" -Property "Enabled crashonCtrl functionality" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\Services\i8042prt\Parameters" -Key "CrashOnCtrlScroll" -Value 1
 Check -Section "Crash control" -Property "Enabled CrashControl functionality" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\Control\CrashControl" -Key "NMICrashDump" -Value 1
 
+#License information
+$License = Get-LicenseInformation
+Check -Section "Licensing" -Property "OS License type" -string -CurrentValue $($License.type) -ExpectedValue $ParamOSLicenseType
+if ($ParamOSLicenseType -like "KMS" -or $License.type -like "KMS") {
+	Check -Section "Licensing" -Property "KMS Server" -string -CurrentValue $($License.KMSServer) -ExpectedValue $ParamOSKMSServer
+	Check -Section "Licensing" -Property "KMS connectivity" -string -CurrentValue $(Test-Telnet -IP $License.kmsserver -port $License.kmsport) -ExpectedValue $true
+} else {
+	Check -Section "Licensing" -Property "KMS Server" -string -CurrentValue $($License.KMSServer) -ExpectedValue 'not detected'
+	Check -Section "Licensing" -Property "KMS connectivity" -string -CurrentValue $(Test-Telnet -IP $License.kmsserver -port $License.kmsport) -ExpectedValue $null
+}
+
 #Firewall
 $FWStatus = Get-FWProfileStatus
-Check -Section "Firewall" -Property "Domain FW profile" -string -CurrentValue $(($FWStatus | where { $_.profile -like "Domain" }).State) -ExpectedValue "Off"
+Check -Section "Firewall" -Property "Domain FW profile" -string -CurrentValue $(($FWStatus | where { $_.profile -like "Domain" }).State) -ExpectedValue $ParamOSLicenseType
 Check -Section "Firewall" -Property "Private FW profile" -string -CurrentValue $(($FWStatus | where { $_.profile -like "Private" }).State) -ExpectedValue "Off"
 Check -Section "Firewall" -Property "Public FW profile" -string -CurrentValue $(($FWStatus | where { $_.profile -like "Public" }).State) -ExpectedValue "Off"
 
@@ -942,7 +994,7 @@ $html += Create-HTMLSection -Name "HPSAM monitoring agent" -Data $Data.HPSAM
 $html += Create-HTMLSection -Name "Vmware tools" -Data $Data.'Vmware tools'
 $html += Create-HTMLSectionTitle -Name "User accounts"
 $html += Create-HTMLSection -Name "Local Administrators" -Data $Data."Local administrators"
-$html += Create-HTMLSectionTitle -Name "System"
+$html += Create-HTMLSectionTitle -Name "OS Configuration"
 $html += Create-HTMLSection -Name "System" -Data $Data.System
 $html += Create-HTMLSection -Name "RDP configuration" -Data $Data.RDPconfig
 $html += Create-HTMLSection -Name "System owner" -Data $Data.owner
@@ -950,6 +1002,7 @@ $html += Create-HTMLSection -Name "Pagefile configuration" -Data $Data.pagefile
 $html += Create-HTMLSection -Name "Disk configuration" -Data $Data.disktimeout
 $html += Create-HTMLSection -Name "Regional settings" -Data $Data.RegionalSettigns
 $html += Create-HTMLSection -Name "Crash control configuration" -Data $Data."Crash control"
+$html += Create-HTMLSection -Name "OS Licensing information" -Data $Data.licensing
 $html += Create-HTMLSectionTitle -Name "Firewall configuration"
 $html += Create-HTMLSection -Name "Firewall status" -Data $Data.Firewall
 
