@@ -1,9 +1,10 @@
-﻿# 23.1.2018 - Initial release. Base functionality backbone. Few WSUS options check for functionality test
-# 24.1.2018 - Added WSUS configuration, SNMP configuration and terminal services configuration
-# 24.1.2018 - Added initial version of HTML report
-# 24.1.2018 - Added McAfee AV check, added check of installed win features
-# 26.1.2018 - Extended McAfee AV details, Added Winaudit, logW, HPSA tools. Added check of system config file. Started with HPSAM tool check
-#
+﻿# 23.01.2018 - Initial release. Base functionality backbone. Few WSUS options check for functionality test
+# 24.01.2018 - Added WSUS configuration, SNMP configuration and terminal services configuration
+# 24.01.2018 - Added initial version of HTML report
+# 24.01.2018 - Added McAfee AV check, added check of installed win features
+# 26.01.2018 - Extended McAfee AV details, Added Winaudit, logW, HPSA tools. Added check of system config file. Started with HPSAM tool check
+# 29.01.2018 - Added check for local Administrators group members
+
 # check https://github.com/luki-sk/MagentaWashCheck for new version os issue reporting
 $version = "0.0.5"
 
@@ -23,6 +24,8 @@ $paramHPSAMID = 'nenula'
 $ParamHPSAServer = '160.118.6.168'
 $PAramHPSAPort = 3001
 $ParamHPSAMServer = "2a00:da9:ff00:61d:e9::2090:6932"
+$ParamLocalAdminRequired = 'osadmin'
+$ParamLocalAdminAllowed = 'osadmin', 'brutus'
 
 #telnet connection test
 function Test-Telnet {
@@ -41,6 +44,56 @@ function Test-Telnet {
 	$false
 	)
 }
+
+function Get-LocalAdmins {
+	[CmdletBinding()]
+	Param ()
+	
+	Process {
+		return net localgroup administrators | where { $_ -AND $_ -notmatch "command completed successfully" } | %{ $_.tolower() } | select -skip 4
+	}
+}
+
+function get-LocalAdminRequired {
+	[CmdletBinding()]
+	Param (
+		[Parameter(Mandatory = $true)]
+		[string[]]$required
+	)
+	
+	Process {
+		$Users = Get-LocalAdmins
+		foreach ($item in $required) {
+			if (!($Users.contains($item.ToLower()))) {
+				return $false
+			}
+		}
+		return $true
+	}
+}
+
+
+function get-LocalAdminAllowed {
+	[CmdletBinding()]
+	Param (
+		[Parameter(Mandatory = $true)]
+		[string[]]$allowed
+	)
+	Begin {
+		$allowed = $allowed | % { $_.ToLower()}
+	}
+	Process {
+		$Users = Get-LocalAdmins
+		foreach ($item in $users) {
+			if (!($allowed.contains($item))) {
+				return $false
+			}
+		}
+		return $true
+	}
+}
+
+
 function get-Sger {
 	[CmdletBinding()]
 	Param ()
@@ -97,7 +150,7 @@ function get-HPSAServer {
 			$Content = (Get-Content $ArgFile)
 			$String = ($Content.replace("opswgw.gw_list: ", "").split(","))[0]
 			if ($string) {
-				return New-Object System.Management.Automation.PSObject -Property @{ Server = $String.split(":")[0];  port = $String.split(":")[1]}
+				return New-Object System.Management.Automation.PSObject -Property @{ Server = $String.split(":")[0]; port = $String.split(":")[1] }
 			} else {
 				return New-Object System.Management.Automation.PSObject -Property @{ Server = "not detected"; port = "not detected" }
 			}
@@ -113,10 +166,10 @@ function get-HPSAMCertificateStatus {
 	[CmdletBinding()]
 	Param ()
 	begin {
-	$result = ovcert -status	
+		$result = ovcert -status
 	}
 	Process {
-		return $result.replace("Status: ","")
+		return $result.replace("Status: ", "")
 		
 	}
 	
@@ -254,7 +307,7 @@ function Check {
 				Set-CheckResult -Section $Section -property $Property -ValueExpected "Installed" -ValueCurrent $status.InstallState -result $false
 			}
 		} elseif ($service) {
-			$status = Get-Service $Name
+			$status = Get-Service $Name -ErrorAction SilentlyContinue
 			if ($status.status -like $value) {
 				Set-CheckResult -Section $Section -property $Property -ValueExpected $Value -ValueCurrent $status.status -result $true
 			} else {
@@ -571,7 +624,7 @@ Check -Section "LogW" -Property "LogW port" -Registry -Path "HKLM:\SOFTWARE\T-Sy
 Check -Section "LogW" -Property "LogW connectivity" -string -Name $(Test-Telnet -IP $Data.LogW.'logw server'.ValueCurrent -port $Data.logw.'logw port'.ValueCurrent) -Value $True
 
 #HPSA
-$HPSADetails= get-HPSAServer
+$HPSADetails = get-HPSAServer
 Check -Section "HPSA" -Property "Service status" -Service -Name "OpswareAgent" -Value "Running"
 Check -Section "HPSA" -Property "MID identifier" -String -Name $(get-HPSAMID) -Value $ParamHPSAMID
 Check -Section "HPSA" -Property "HPSA server" -String -Name $HPSADetails.server -Value $ParamHPSAServer
@@ -584,6 +637,19 @@ Check -Section "HPSAM" -Property "Service status" -Service -Name "OvCtrl" -Value
 Check -Section "HPSAM" -Property "Certificates status" -string -Name $(get-HPSAMCertificateStatus) -Value "Certificate is installed."
 Check -Section "HPSAM" -Property "HPSAM server" -string -Name $((ovconfget | where { $_ -like "MANAGER=*" }).Replace("MANAGER=", "")) -Value $ParamHPSAMServer
 Check -Section "HPSAM" -Property "HPSAM connectivity" -string -Name $(Test-Telnet -IP $Data.HPSAM.'HPSAM server'.ValueCurrent -port 383) -Value $True
+
+#Local admininstators members
+$LocalAdminsList = Get-LocalAdmins
+if (get-LocalAdminRequired -required $ParamLocalAdminRequired) {
+	Set-CheckResult -Section "Local administrators" -property "Required members" -ValueExpected $($ParamLocalAdminRequired -join "<br/>") -ValueCurrent $($LocalAdminsList -join "<br/>") -result $true
+} else {
+	Set-CheckResult -Section "Local administrators" -property "Required members" -ValueExpected $($ParamLocalAdminRequired -join "<br/>") -ValueCurrent $($LocalAdminsList -join "<br/>") -result $false
+}
+if (get-LocalAdminAllowed -allowed $ParamLocalAdminAllowed) {
+	Set-CheckResult -Section "Local administrators" -property "Additional members" -ValueExpected $($ParamLocalAdminAllowed -join "<br/>") -ValueCurrent $($LocalAdminsList -join "<br/>") -result $true
+} else {
+	Set-CheckResult -Section "Local administrators" -property "Additional members" -ValueExpected $($ParamLocalAdminAllowed -join "<br/>") -ValueCurrent $($LocalAdminsList -join "<br/>") -result $false
+}
 
 
 
@@ -611,6 +677,10 @@ $html += Create-HTMLSection -Name "WinAudit security agent" -Data $Data.Winaudit
 $html += Create-HTMLSection -Name "LogW agent" -Data $Data.LogW
 $html += Create-HTMLSection -Name "HPSA automation agent" -Data $Data.HPSA
 $html += Create-HTMLSection -Name "HPSAM monitoring agent" -Data $Data.HPSAM
+$html += Create-HTMLSection -Name "User accounts" -Data $Data.LogW
+$html += Create-HTMLSection -Name "Local Administrators" -Data $Data."Local administrators"
+
+
 
 $html += Get-HTMLEnd
 
