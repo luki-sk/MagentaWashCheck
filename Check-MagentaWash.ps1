@@ -799,12 +799,14 @@ if (get-LocalAdminAllowed -allowed $ParamLocalAdminAllowed) {
 
 Check -Section "Local administrators" -Property "Build-in admin name" -string -CurrentValue $(Get-LocalBuildInAdmin) -ExpectedValue $ParamLocalAdminName
 
-
-
 #System
 Check -Section "System" -Property "CD-ROM letter" -string -CurrentValue $(get-CDROMletter) -ExpectedValue "Z:"
 Check -Section "System" -Property "RDP connection enabled" -string -CurrentValue $(((Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).AllowTSConnections -eq 1)) -ExpectedValue $true
 Check -Section "System" -Property "Allow RDP connection only with network level autentication enabled" -string -CurrentValue $(Get-RDPAutenticationLevel) -ExpectedValue $false
+
+#Crash control
+Check -Section "Crash control" -Property "Enabled crashonCtrl functionality" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\Services\i8042prt\Parameters" -Key "CrashOnCtrlScroll" -Value 1
+Check -Section "Crash control" -Property "Enabled CrashControl functionality" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\Control\CrashControl" -Key "NMICrashDump" -Value 1
 
 #Firewall
 $FWStatus = Get-FWProfileStatus
@@ -842,6 +844,8 @@ $html += Create-HTMLSectionTitle -Name "User accounts"
 $html += Create-HTMLSection -Name "Local Administrators" -Data $Data."Local administrators"
 $html += Create-HTMLSectionTitle -Name "System"
 $html += Create-HTMLSection -Name "System" -Data $Data.System
+$html += Create-HTMLSectionTitle -Name "System crash configuration"
+$html += Create-HTMLSection -Name "Crash control" -Data $Data."Crash control"
 $html += Create-HTMLSectionTitle -Name "Firewall configuration"
 $html += Create-HTMLSection -Name "Firewall status" -Data $Data.Firewall
 
