@@ -50,6 +50,21 @@ function Test-Telnet {
 	)
 }
 
+function get-CDROMLetter {
+	[CmdletBinding()]
+	Param ()
+	
+	Process {
+		$CDROMLetter = (gwmi win32_logicaldisk -Filter "drivetype=5") | %{ $_.deviceID }
+		if (!$CDROMLetter) {
+		return "not detected"
+		} else {
+		return $CDROMLetter	
+		}
+	}
+	
+}
+
 function Get-LocalAdmins {
 	[CmdletBinding()]
 	Param ()
@@ -743,6 +758,9 @@ Check -Section "Local administrators" -Property "Build-in admin name" -string -C
 
 
 
+#System
+Check -Section "System" -Property "CD-ROM letter" -string -CurrentValue $(get-CDROMletter) -ExpectedValue "Z:"
+
 
 
 #HTML
@@ -769,9 +787,10 @@ $html += Create-HTMLSection -Name "LogW agent" -Data $Data.LogW
 $html += Create-HTMLSection -Name "HPSA automation agent" -Data $Data.HPSA
 $html += Create-HTMLSection -Name "HPSAM monitoring agent" -Data $Data.HPSAM
 $html += Create-HTMLSection -Name "Vmware tools" -Data $Data.'Vmware tools'
-$html += Create-HTMLSection -Name "User accounts" -Data $Data.LogW
+$html += Create-HTMLSectionTitle -Name "User accounts"
 $html += Create-HTMLSection -Name "Local Administrators" -Data $Data."Local administrators"
-
+$html += Create-HTMLSectionTitle -Name "System"
+$html += Create-HTMLSection -Name "System" -Data $Data.System
 
 
 $html += Get-HTMLEnd
