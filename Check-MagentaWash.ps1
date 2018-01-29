@@ -23,6 +23,7 @@ $paramLogWVersion = "1.30"
 $paramLogWServer = "6.49.35.103"
 $paramLogWPort = 314
 $paramSger = "nenula"
+$ParamDOnumber = 'nenula'
 $paramHPSAMID = 'nenula'
 $ParamHPSAServer = '160.118.6.168'
 $PAramHPSAPort = 3001
@@ -110,6 +111,29 @@ function Get-LocalBuildInAdmin {
 	}
 }
 
+function get-DOnumber {
+	[CmdletBinding()]
+	Param ()
+	
+	process {
+		if ((Test-Path $ConfigFile -PathType Leaf)) {
+			[string]$DO_row = Get-Content $ConfigFile | Select-String "task*"
+			if ($DO_row -eq $null) {
+				return "DO not defined"
+			} else {
+				$DO = $DO_row.Substring($DO_row.LastIndexOf("=") + 1)
+				
+				if ($DO -eq $null -or $DO -like "") {
+					return "DO not defined"
+				} else {
+					return $DO
+				}
+			}
+		} else {
+			return "file missing"
+		}
+	}
+}
 function get-Sger {
 	[CmdletBinding()]
 	Param ()
@@ -133,6 +157,7 @@ function get-Sger {
 		}
 	}
 }
+
 function Get-HPSAMID {
 	[CmdletBinding()]
 	Param ()
@@ -644,6 +669,7 @@ Check -Section "Temporary folders" -Property "PerSessionTempDir" -Registry -Path
 $ConfigFile = "C:\Windows\System32\Drivers\etc\epmf\tsi_system_info.cfg"
 Check -Section "Server config tsi_system_info.cfg" -Property "File exists" -String -CurrentValue $((Test-Path $ConfigFile -PathType Leaf) -eq $true) -ExpectedValue $true
 Check -Section "Server config tsi_system_info.cfg" -Property "Sger" -String -CurrentValue $(get-sger) -ExpectedValue $ParamSger
+Check -Section "Server config tsi_system_info.cfg" -Property "DO number" -String -CurrentValue $(get-DOnumber) -ExpectedValue $ParamDOnumber
 
 
 
