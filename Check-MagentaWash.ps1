@@ -98,7 +98,7 @@ function Get-OSBootTimeout {
 		if ($timeout) {
 			return $timeout
 		} else {
-			return "not detected"	
+			return "not detected"
 		}
 		
 	}
@@ -164,7 +164,7 @@ function Get-LocalBuildInAdmin {
 	}
 }
 
-function Get-RDPAutenticationlevel{
+function Get-RDPAutenticationlevel {
 	[CmdletBinding()]
 	Param ()
 	Process {
@@ -180,7 +180,7 @@ function Get-RDPAutenticationlevel{
 				"0" { $result = $false }
 			}
 		} else {
-			$result = "not detected"	
+			$result = "not detected"
 		}
 		return $result
 		
@@ -829,7 +829,11 @@ Check -Section "RDPConfig" -Property "Allow RDP connection only with network lev
 Check -Section "Owner" -Property "System organization" -Registry -Path "Hklm:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Key "Registeredorganizaion" -Value "T-Systems"
 Check -Section "Owner" -Property "System owner" -Registry -Path "Hklm:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Key "Registeredowner" -Value "T-Systems"
 
-
+#Pagefile
+$PagefileSize = Get-WmiObject -Query "Select * From Win32_PageFileSetting Where Name='c:\\pagefile.sys'"
+Check -Section "Pagefile" -Property "Automatically managed page file" -string -CurrentValue $((Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges).AutomaticManagedPagefile) -ExpectedValue $false
+Check -Section "Pagefile" -Property "Page file initial size " -string -CurrentValue $(if ($PagefileSize.InitialSize) { $PagefileSize.InitialSize } else { "not detected" }) -ExpectedValue 8192
+Check -Section "Pagefile" -Property "Page file maximum size" -string -CurrentValue $(if ($PagefileSize.MaximumSize) { $PagefileSize.MaximumSize } else { "not detected" }) -ExpectedValue 8192
 
 #Crash control
 Check -Section "Crash control" -Property "Enabled crashonCtrl functionality" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\Services\i8042prt\Parameters" -Key "CrashOnCtrlScroll" -Value 1
@@ -873,6 +877,7 @@ $html += Create-HTMLSectionTitle -Name "System"
 $html += Create-HTMLSection -Name "System" -Data $Data.System
 $html += Create-HTMLSection -Name "RDP configuration" -Data $Data.RDPconfig
 $html += Create-HTMLSection -Name "System owner" -Data $Data.owner
+$html += Create-HTMLSection -Name "Pagefile configuration" -Data $Data.pagefile
 $html += Create-HTMLSectionTitle -Name "System crash configuration"
 $html += Create-HTMLSection -Name "Crash control" -Data $Data."Crash control"
 $html += Create-HTMLSectionTitle -Name "Firewall configuration"
