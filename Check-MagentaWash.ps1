@@ -26,6 +26,7 @@ $PAramHPSAPort = 3001
 $ParamHPSAMServer = "2a00:da9:ff00:61d:e9::2090:6932"
 $ParamLocalAdminRequired = 'osadmin'
 $ParamLocalAdminAllowed = 'osadmin', 'brutus'
+$ParamLocalAdminName = 'osadmin'
 
 #telnet connection test
 function Test-Telnet {
@@ -93,6 +94,18 @@ function get-LocalAdminAllowed {
 	}
 }
 
+function Get-LocalBuildInAdmin {
+	[CmdletBinding()]
+	Param ()
+	
+	Process {
+		$adsi = [ADSI]"WinNT://localhost"
+		$Users = $adsi.Children | where { $_.SchemaClassName -eq 'user' } | select @{ n = 'User'; e = { $_.name } }, @{n = 'SID'; e = {(New-Object System.Security.Principal.SecurityIdentifier($_.objectSid.value, 0)).Value}}
+		
+		$BuildInAdmin = $Users | where { $_.sid -like "*-500" }
+		return $BuildInAdmin.User
+	}
+}
 
 function get-Sger {
 	[CmdletBinding()]
@@ -645,13 +658,14 @@ if (get-LocalAdminRequired -required $ParamLocalAdminRequired) {
 } else {
 	Set-CheckResult -Section "Local administrators" -property "Required members" -ValueExpected $($ParamLocalAdminRequired -join "<br/>") -ValueCurrent $($LocalAdminsList -join "<br/>") -result $false
 }
+
 if (get-LocalAdminAllowed -allowed $ParamLocalAdminAllowed) {
 	Set-CheckResult -Section "Local administrators" -property "Additional members" -ValueExpected $($ParamLocalAdminAllowed -join "<br/>") -ValueCurrent $($LocalAdminsList -join "<br/>") -result $true
 } else {
 	Set-CheckResult -Section "Local administrators" -property "Additional members" -ValueExpected $($ParamLocalAdminAllowed -join "<br/>") -ValueCurrent $($LocalAdminsList -join "<br/>") -result $false
 }
 
-
+Check -Section "Local administrators" -Property "Build-in admin name" -string -Name $(Get-LocalBuildInAdmin) -Value $ParamLocalAdminName
 
 
 #HTML
