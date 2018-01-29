@@ -328,6 +328,10 @@ function Check {
 		[switch]$service,
 		[Parameter(Mandatory = $true, ParameterSetName = 'string')]
 		[switch]$string,
+		[Parameter(Mandatory = $true, ParameterSetName = 'string')]
+		[string]$CurrentValue,
+		[Parameter(Mandatory = $true, ParameterSetName = 'string')]
+		[string]$ExpectedValue,
 		[string]$Name,
 		[string]$Value,
 		[string]$Section,
@@ -369,10 +373,10 @@ function Check {
 				Set-CheckResult -Section $Section -property $Property -ValueExpected $Value -ValueCurrent $status.status -result $false
 			}
 		} elseif ($string) {
-			if ($name -like $value) {
-				Set-CheckResult -Section $Section -property $Property -ValueExpected $Value -ValueCurrent $name -result $true
+			if ($CurrentValue -like $ExpectedValue) {
+				Set-CheckResult -Section $Section -property $Property -ValueExpected $ExpectedValue -ValueCurrent $CurrentValue -result $true
 			} else {
-				Set-CheckResult -Section $Section -property $Property -ValueExpected $Value -ValueCurrent $name -result $false
+				Set-CheckResult -Section $Section -property $Property -ValueExpected $ExpectedValue -ValueCurrent $CurrentValue -result $false
 			}
 		}
 		
@@ -638,8 +642,8 @@ Check -Section "Temporary folders" -Property "PerSessionTempDir" -Registry -Path
 
 #Server Config file 
 $ConfigFile = "C:\Windows\System32\Drivers\etc\epmf\tsi_system_info.cfg"
-Check -Section "Server config tsi_system_info.cfg" -Property "File exists" -String -Name $((Test-Path $ConfigFile -PathType Leaf) -eq $true) -Value $true
-Check -Section "Server config tsi_system_info.cfg" -Property "Sger" -String -Name $(get-sger) -Value $ParamSger
+Check -Section "Server config tsi_system_info.cfg" -Property "File exists" -String -CurrentValue $((Test-Path $ConfigFile -PathType Leaf) -eq $true) -ExpectedValue $true
+Check -Section "Server config tsi_system_info.cfg" -Property "Sger" -String -CurrentValue $(get-sger) -ExpectedValue $ParamSger
 
 
 
@@ -660,8 +664,8 @@ switch ($OSData.architecture) {
 	}
 }
 $McAfeeEpo = Get-McAfeeEPO
-Check -Section "McAfee" -Property "EPO Server" -String -Name $(($McAfeeEpo | %{ "$($_.server):$($_.port)" }) -join "<br/>") -Value $ParamMcAfeeEPO
-Check -Section "McAfee" -Property "EPO connectivity" -String -Name $(Test-Telnet -IP $McAfeeEpo[0].server -port $McAfeeEpo[0].port) -Value $True
+Check -Section "McAfee" -Property "EPO Server" -String -CurrentValue $(($McAfeeEpo | %{ "$($_.server):$($_.port)" }) -join "<br/>") -ExpectedValue $ParamMcAfeeEPO
+Check -Section "McAfee" -Property "EPO connectivity" -String -CurrentValue $(Test-Telnet -IP $McAfeeEpo[0].server -port $McAfeeEpo[0].port) -ExpectedValue $True
 
 
 #Winaudit
@@ -669,31 +673,31 @@ Check -Section "WinAudit" -Property "Service status" -Service -Name "Winaudit" -
 Check -Section "WinAudit" -Property "Winaudit version" -Registry -Path "HKLM:\SOFTWARE\T-Systems\WinAudit" -Key "Version" -Value $paramWinauditVersion
 Check -Section "WinAudit" -Property "Winaudit server" -Registry -Path "HKLM:\SOFTWARE\T-Systems\WinAudit" -Key "Server" -Value $paramWinauditServer
 Check -Section "WinAudit" -Property "Winaudit port" -Registry -Path "HKLM:\SOFTWARE\T-Systems\WinAudit" -Key "port" -Value $paramWinauditPort
-Check -Section "WinAudit" -Property "Winaudit connectivity" -string -Name $(Test-Telnet -IP $Data.winaudit.'Winaudit server'.ValueCurrent -port $Data.winaudit.'Winaudit port'.ValueCurrent) -Value $True
+Check -Section "WinAudit" -Property "Winaudit connectivity" -string -CurrentValue $(Test-Telnet -IP $Data.winaudit.'Winaudit server'.ValueCurrent -port $Data.winaudit.'Winaudit port'.ValueCurrent) -ExpectedValue $True
 
 #logW
 Check -Section "LogW" -Property "Service status" -Service -Name "LogW" -Value "Running"
 Check -Section "LogW" -Property "LogW version" -Registry -Path "HKLM:\SOFTWARE\T-Systems\LogW" -Key "Version" -Value $paramLogWVersion
 Check -Section "LogW" -Property "LogW server" -Registry -Path "HKLM:\SOFTWARE\T-Systems\LogW" -Key "LogServer_IP" -Value $paramLogWServer
 Check -Section "LogW" -Property "LogW port" -Registry -Path "HKLM:\SOFTWARE\T-Systems\LogW" -Key "LogServer_Port" -Value $paramLogWPort
-Check -Section "LogW" -Property "LogW connectivity" -string -Name $(Test-Telnet -IP $Data.LogW.'logw server'.ValueCurrent -port $Data.logw.'logw port'.ValueCurrent) -Value $True
+Check -Section "LogW" -Property "LogW connectivity" -string -CurrentValue $(Test-Telnet -IP $Data.LogW.'logw server'.ValueCurrent -port $Data.logw.'logw port'.ValueCurrent) -ExpectedValue $True
 
 #HPSA
 $HPSADetails = get-HPSAServer
 Check -Section "HPSA" -Property "Service status" -Service -Name "OpswareAgent" -Value "Running"
-Check -Section "HPSA" -Property "MID identifier" -String -Name $(get-HPSAMID) -Value $ParamHPSAMID
-Check -Section "HPSA" -Property "HPSA server" -String -Name $HPSADetails.server -Value $ParamHPSAServer
-Check -Section "HPSA" -Property "HPSA port" -String -Name $HPSADetails.port -Value $ParamHPSAPort
-Check -Section "HPSA" -Property "HPSA connectivity" -string -Name $(Test-Telnet -IP $HPSADetails.server -port $HPSADetails.port) -Value $True
+Check -Section "HPSA" -Property "MID identifier" -String -CurrentValue $(get-HPSAMID) -ExpectedValue $ParamHPSAMID
+Check -Section "HPSA" -Property "HPSA server" -String -CurrentValue $HPSADetails.server -ExpectedValue $ParamHPSAServer
+Check -Section "HPSA" -Property "HPSA port" -String -CurrentValue $HPSADetails.port -ExpectedValue $ParamHPSAPort
+Check -Section "HPSA" -Property "HPSA connectivity" -string -CurrentValue $(Test-Telnet -IP $HPSADetails.server -port $HPSADetails.port) -ExpectedValue $True
 
 #HPSAM
 Check -Section "HPSAM" -Property "Service status" -Service -Name "OvCtrl" -Value "Running"
-Check -Section "HPSAM" -Property "Certificates status" -string -Name $(get-HPSAMCertificateStatus) -Value "Certificate is installed."
-Check -Section "HPSAM" -Property "HPSAM server" -string -Name $(Get-HPSAMServer) -Value $ParamHPSAMServer
-Check -Section "HPSAM" -Property "HPSAM connectivity" -string -Name $(Test-Telnet -IP $Data.HPSAM.'HPSAM server'.ValueCurrent -port 383) -Value $True
+Check -Section "HPSAM" -Property "Certificates status" -string -CurrentValue $(get-HPSAMCertificateStatus) -ExpectedValue "Certificate is installed."
+Check -Section "HPSAM" -Property "HPSAM server" -string -CurrentValue $(Get-HPSAMServer) -ExpectedValue $ParamHPSAMServer
+Check -Section "HPSAM" -Property "HPSAM connectivity" -string -CurrentValue $(Test-Telnet -IP $Data.HPSAM.'HPSAM server'.ValueCurrent -port 383) -ExpectedValue $True
 
 #Vmware tools
-Check -Section "Vmware tools" -Property "Vmware tools version" -string -Name $(Get-VmwareToolsVersion) -Value "10.*"
+Check -Section "Vmware tools" -Property "Vmware tools version" -string -CurrentValue $(Get-VmwareToolsVersion) -ExpectedValue "10.*"
 
 #Local admininstators members
 $LocalAdminsList = Get-LocalAdmins
@@ -709,7 +713,7 @@ if (get-LocalAdminAllowed -allowed $ParamLocalAdminAllowed) {
 	Set-CheckResult -Section "Local administrators" -property "Additional members" -ValueExpected $($ParamLocalAdminAllowed -join "<br/>") -ValueCurrent $($LocalAdminsList -join "<br/>") -result $false
 }
 
-Check -Section "Local administrators" -Property "Build-in admin name" -string -Name $(Get-LocalBuildInAdmin) -Value $ParamLocalAdminName
+Check -Section "Local administrators" -Property "Build-in admin name" -string -CurrentValue $(Get-LocalBuildInAdmin) -ExpectedValue $ParamLocalAdminName
 
 
 
