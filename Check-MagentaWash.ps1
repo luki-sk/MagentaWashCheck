@@ -31,6 +31,10 @@ $ParamHPSAMServer = "2a00:da9:ff00:61d:e9::2090:6932"
 $ParamLocalAdminRequired = 'osadmin'
 $ParamLocalAdminAllowed = 'osadmin', 'brutus'
 $ParamLocalAdminName = 'osadmin'
+$ParamTimeZone = "GMT Standard Time"
+$ParamCulture = "en-US"
+$ParamSystemLocale = "en-US"
+$ParamWinHomeLocation = "242"
 
 #telnet connection test
 function Test-Telnet {
@@ -163,6 +167,62 @@ function Get-LocalBuildInAdmin {
 		return $BuildInAdmin.User
 	}
 }
+function Get-WinCulture {
+	[CmdletBinding()]
+	Param ()
+	Process {
+		Try {
+			$culture = Get-Culture
+		} Catch {
+			
+		}
+		if ($culture.name) {
+			return $culture.name
+		} else {
+			return "not detected"
+		}
+	}
+	
+}
+
+function Get-WinLocale {
+	[CmdletBinding()]
+	Param ()
+	
+	Process {
+		Try {
+			$locale = Get-WinSystemLocale
+		} Catch {
+			
+		}
+		if ($Locale.Name) {
+			return $locale.name
+		} else {
+			return "not detected"	
+		}
+	}
+}
+
+function Get-WinLocation {
+	[CmdletBinding()]
+	Param ()
+	
+	Process {
+		try {
+			$location = Get-WinHomeLocation
+		} Catch {
+			
+		}
+		if ($location.geoid) {
+			return $location.geoid
+		} else {
+			return "not defined"	
+		}
+		
+	}
+}
+
+
 
 function Get-RDPAutenticationlevel {
 	[CmdletBinding()]
@@ -835,7 +895,15 @@ Check -Section "Pagefile" -Property "Automatically managed page file" -string -C
 Check -Section "Pagefile" -Property "Page file initial size " -string -CurrentValue $(if ($PagefileSize.InitialSize) { $PagefileSize.InitialSize } else { "not detected" }) -ExpectedValue 8192
 Check -Section "Pagefile" -Property "Page file maximum size" -string -CurrentValue $(if ($PagefileSize.MaximumSize) { $PagefileSize.MaximumSize } else { "not detected" }) -ExpectedValue 8192
 
+#Disk timeout
 Check -Section "DiskTimeout" -Property "Disk timeout value" -Registry -path "HKLM:\System\CurrentControlSet\Services\Disk" -Key "TimeoutValue" -Value "180"
+
+#Timezone
+Check -Section "RegionalSettigns" -Property "OS time zone" -string -CurrentValue $(tzutil /g) -ExpectedValue $ParamTimeZone
+Check -Section "RegionalSettigns" -Property "OS culture" -string -CurrentValue $(get-WinCulture) -ExpectedValue $ParamCulture
+Check -Section "RegionalSettigns" -Property "OS system locale" -string -CurrentValue $(Get-WinLocale) -ExpectedValue $ParamSystemLocale
+Check -Section "RegionalSettigns" -Property "Server time zone" -string -CurrentValue $(Get-WinLocation) -ExpectedValue $ParamWinHomeLocation
+
 #Crash control
 Check -Section "Crash control" -Property "Enabled crashonCtrl functionality" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\Services\i8042prt\Parameters" -Key "CrashOnCtrlScroll" -Value 1
 Check -Section "Crash control" -Property "Enabled CrashControl functionality" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\Control\CrashControl" -Key "NMICrashDump" -Value 1
@@ -880,8 +948,8 @@ $html += Create-HTMLSection -Name "RDP configuration" -Data $Data.RDPconfig
 $html += Create-HTMLSection -Name "System owner" -Data $Data.owner
 $html += Create-HTMLSection -Name "Pagefile configuration" -Data $Data.pagefile
 $html += Create-HTMLSection -Name "Disk configuration" -Data $Data.disktimeout
-$html += Create-HTMLSectionTitle -Name "System crash configuration"
-$html += Create-HTMLSection -Name "Crash control" -Data $Data."Crash control"
+$html += Create-HTMLSection -Name "Regional settings" -Data $Data.RegionalSettigns
+$html += Create-HTMLSection -Name "Crash control configuration" -Data $Data."Crash control"
 $html += Create-HTMLSectionTitle -Name "Firewall configuration"
 $html += Create-HTMLSection -Name "Firewall status" -Data $Data.Firewall
 
