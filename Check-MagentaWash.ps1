@@ -835,6 +835,7 @@ Check -Section "Pagefile" -Property "Automatically managed page file" -string -C
 Check -Section "Pagefile" -Property "Page file initial size " -string -CurrentValue $(if ($PagefileSize.InitialSize) { $PagefileSize.InitialSize } else { "not detected" }) -ExpectedValue 8192
 Check -Section "Pagefile" -Property "Page file maximum size" -string -CurrentValue $(if ($PagefileSize.MaximumSize) { $PagefileSize.MaximumSize } else { "not detected" }) -ExpectedValue 8192
 
+Check -Section "DiskTimeout" -Property "Disk timeout value" -Registry -path "HKLM:\System\CurrentControlSet\Services\Disk" -Key "TimeoutValue" -Value "180"
 #Crash control
 Check -Section "Crash control" -Property "Enabled crashonCtrl functionality" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\Services\i8042prt\Parameters" -Key "CrashOnCtrlScroll" -Value 1
 Check -Section "Crash control" -Property "Enabled CrashControl functionality" -Registry -Path "hklm:\SYSTEM\CurrentControlSet\Control\CrashControl" -Key "NMICrashDump" -Value 1
@@ -878,6 +879,7 @@ $html += Create-HTMLSection -Name "System" -Data $Data.System
 $html += Create-HTMLSection -Name "RDP configuration" -Data $Data.RDPconfig
 $html += Create-HTMLSection -Name "System owner" -Data $Data.owner
 $html += Create-HTMLSection -Name "Pagefile configuration" -Data $Data.pagefile
+$html += Create-HTMLSection -Name "Disk configuration" -Data $Data.disktimeout
 $html += Create-HTMLSectionTitle -Name "System crash configuration"
 $html += Create-HTMLSection -Name "Crash control" -Data $Data."Crash control"
 $html += Create-HTMLSectionTitle -Name "Firewall configuration"
